@@ -34,10 +34,10 @@ PAD_A               = $80
 PAD_B               = $40
 PAD_SELECT          = $20
 PAD_START           = $10
-PAD_U               = $01
+PAD_U               = $08
 PAD_D               = $04
 PAD_L               = $02
-PAD_R               = $08
+PAD_R               = $01
 
 ; Useful PPU memory addresses
 NAME_TABLE_0_ADDRESS		  = $2000

@@ -1,7 +1,7 @@
 Modules list:
 -------------
 controller.o:
-    CODE              Offs=000000  Size=000111  Align=00001  Fill=0000
+    CODE              Offs=000000  Size=000127  Align=00001  Fill=0000
     RODATA            Offs=000000  Size=000420  Align=00001  Fill=0000
     ZEROPAGE          Offs=000000  Size=00002E  Align=00001  Fill=0000
     HEADER            Offs=000000  Size=000008  Align=00001  Fill=0000
@@ -20,8 +20,8 @@ HEADER                000000  000007  000008  00001
 ZEROPAGE              000000  00002D  00002E  00001
 OAM                   000200  0002FF  000100  00001
 STARTUP               008000  008037  000038  00001
-CODE                  008038  008148  000111  00001
-RODATA                008149  008568  000420  00001
+CODE                  008038  00815E  000127  00001
+RODATA                00815F  00857E  000420  00001
 VECTORS               00FFFA  00FFFF  000006  00001
 
 
