@@ -15,15 +15,17 @@ PPU_ADDRESS         = $2006 ; PPU VRAM Address Register
 PPU_VRAM_IO         = $2007 ; VRAM I/O Register (Read/Write)
 SPRITE_DMA          = $4014 ; Sprite DMA Register
 
+; Define APU Registers (AUDIO PROCESSING UNIT)
+APU_DM_CONTROL      = $4010 ; APU Delta Modulation Control Register (Write)
+APU_CLOCK           = $4015 ; APU Sound/Vertical Clock Signal Register (Read/Write)
+
 ; OAM Sprite Byte Offset
 SPRITE_OFFSET_Y       = 0
 SPRITE_OFFSET_TILE    = 1
 SPRITE_OFFSET_ATTRIB  = 2
 SPRITE_OFFSET_X       = 3
 
-; Define APU Registers (AUDIO PROCESSING UNIT)
-APU_DM_CONTROL      = $4010 ; APU Delta Modulation Control Register (Write)
-APU_CLOCK           = $4015 ; APU Sound/Vertical Clock Signal Register (Read/Write)
+
 
 ; Joystick/Controller values
 JOYPAD1             = $4016 ; Joypad 1 (Read/Write)
