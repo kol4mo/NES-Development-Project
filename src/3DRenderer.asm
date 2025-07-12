@@ -2,40 +2,155 @@
 .include "macros.inc"
 
 
-.segment "STARTUP"
-;C000 to C029
-.proc system_init
-        SEI                     ; Disable interrupts (critical for setup)
-        CLD                     ; Clear decimal mode (NES doesn't use BCD)
-        LDX #$00                ; Load X register with 0
-        STX PPU_CONTROL         ; Disable PPU control register ($2000)
-        STX PPU_MASK            ; Disable PPU mask register ($2001) - screen off
-        DEX                     ; Decrement X (now $FF)
-        TXS                     ; Set stack pointer to $FF (top of stack page)
-        LDA #$40                ; Load accumulator with $40 (bit 6 set)
-        STA $4017               ; Disable frame counter IRQ in APU
-        LDA #$00                ; Load accumulator with 0
-        STA APU_DM_CONTROL      ; Disable DMC (Delta Modulation Channel)
-        BIT PPU_STATUS          ; Read PPU status to clear VBlank flag
-wait_vblank1:
-        BIT PPU_STATUS          ; Check PPU status register
-        BPL wait_vblank1        ; Branch if VBlank flag not set (bit 7 = 0)
-wait_vblank2:
-        BIT PPU_STATUS          ; Check PPU status register again
-        BPL wait_vblank2        ; Branch if VBlank flag not set (bit 7 = 0)
-        JSR $C046               ; Call function at $C046 (outside range)
-        JSR $C047               ; Call function at $C047 (outside range)
-        JMP $C25B               ; Jump to $C25B (outside range)
-.endproc
+.segment "HEADER"
+.byte 'N', 'E', 'S', $1a      ; "NES" followed by MS-DOS EOF marker
+.byte $02                     ; 2 x 16KB PRG-ROM banks
+.byte $01                     ; 1 x 8KB CHR-ROM bank
+.byte $00, $00                ; Mapper 0, no special features
+
+.segment "ZEROPAGE"
+; Pattern data and temporary storage
+zp_tmp0:    .res 1    ; $00
+zp_tmp1:    .res 1    ; $01
+zp_tmp2:    .res 1    ; $02
+zp_tmp3:    .res 1    ; $03
+
+; Interrupt/dispatch flags and function pointers
+zp_flag0:   .res 1    ; $10
+zp_func_lo: .res 1    ; $11 (function pointer low)
+zp_func_hi: .res 1    ; $12 (function pointer high)
+
+; Controller state and edge detection
+zp_ctrl0:   .res 1    ; $13 (controller 1 state)
+zp_ctrl1:   .res 1    ; $14 (controller 2 state)
+zp_edge0:   .res 1    ; $15 (controller 1 edge)
+zp_edge1:   .res 1    ; $16 (controller 2 edge)
+
+; Counters, lookup, and rendering
+zp_target:  .res 1    ; $17
+zp_counter: .res 1    ; $18
+zp_lownib:  .res 1    ; $19
+zp_highnib: .res 1    ; $1A
+
+; Rendering parameters and flags
+zp_ppuctrl: .res 1    ; $1B (PPU control)
+zp_var1C:   .res 1    ; $1C
+zp_var1D:   .res 1    ; $1D
+zp_var1E:   .res 1    ; $1E
+zp_var1F:   .res 1    ; $1F
+
+; Raycasting and rendering variables
+zp_var20:   .res 1    ; $20
+zp_var21:   .res 1    ; $21
+zp_var22:   .res 1    ; $22
+zp_var23:   .res 1    ; $23
+zp_var24:   .res 1    ; $24
+zp_var25:   .res 1    ; $25
+zp_var26:   .res 1    ; $26
+zp_var27:   .res 1    ; $27
+zp_var28:   .res 1    ; $28
+zp_var29:   .res 1    ; $29
+zp_var2A:   .res 1    ; $2A
+zp_var2B:   .res 1    ; $2B
+zp_var2C:   .res 1    ; $2C
+zp_var2D:   .res 1    ; $2D
+zp_var2E:   .res 1    ; $2E
+
+; Upload state, palette, etc.
+zp_var2F:   .res 1    ; $2F
+
+; General-purpose buffer for results (used as $0030,Y, size 4)
+zp_buffer:  .res 4    ; $30-$33
+
+zp_var31:   .res 1    ; $31
+zp_var32:   .res 1    ; $32
+zp_var33:   .res 1    ; $33
+zp_var34:   .res 1    ; $34
+zp_var35:   .res 1    ; $35
+zp_var36:   .res 1    ; $36
+zp_var37:   .res 1    ; $37
+
+; Raycasting, rendering, and sprite variables
+zp_var38:   .res 1    ; $38
+zp_var39:   .res 1    ; $39
+zp_var3A:   .res 1    ; $3A
+zp_var3B:   .res 1    ; $3B
+zp_var3C:   .res 1    ; $3C
+zp_var3D:   .res 1    ; $3D
+zp_var3E:   .res 1    ; $3E
+zp_var3F:   .res 1    ; $3F
+zp_var40:   .res 1    ; $40
+zp_var41:   .res 1    ; $41
+zp_var42:   .res 1    ; $42
+zp_var43:   .res 1    ; $43
+zp_var44:   .res 1    ; $44
+zp_var45:   .res 1    ; $45
+zp_var46:   .res 1    ; $46
+zp_var47:   .res 1    ; $47
+zp_var48:   .res 1    ; $48
+zp_var49:   .res 1    ; $49
+zp_var4A:   .res 1    ; $4A
+zp_var4B:   .res 1    ; $4B
+zp_var4C:   .res 1    ; $4C
+zp_var4D:   .res 1    ; $4D
+zp_var4E:   .res 1    ; $4E
+zp_var4F:   .res 1    ; $4F
+zp_var50:   .res 1    ; $50
+zp_var51:   .res 1    ; $51
+zp_var52:   .res 1    ; $52
+zp_var53:   .res 1    ; $53
+zp_var54:   .res 1    ; $54
+zp_var55:   .res 1    ; $55
+zp_var56:   .res 1    ; $56
+zp_var57:   .res 1    ; $57
+zp_var58:   .res 1    ; $58
+zp_var59:   .res 1    ; $59
+zp_var5A:   .res 1    ; $5A
+zp_var5B:   .res 1    ; $5B
+zp_var5C:   .res 1    ; $5C
+zp_var5D:   .res 1    ; $5D
+zp_var5E:   .res 1    ; $5E
+zp_var5F:   .res 1    ; $5F
+zp_var60:   .res 1    ; $60
+zp_var61:   .res 1    ; $61
+
+
 
 .segment "CODE"
+lookup_CA79:
+    .byte 64, 60, 56, 52, 48, 44, 40, 36, 32, 28, 24, 20, 16, 12, 8, 4
+    .byte 0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60
+    .byte 64, 60, 56, 52, 48, 44, 40, 36, 32, 28, 24, 20, 16, 12, 8, 4
+    .byte 0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60
+    .byte 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16
+    .byte 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32
+    .byte 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48
+    .byte 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64
+
+lookup_CE31:
+    .byte %11111111, %01111110, %00111100, %00011000, %00000000, %00011000, %00111100, %01111110
+    .byte %11111111, %11111111, %01111110, %00111100, %00011000, %00000000, %00011000, %00111100
+    .byte %01111110, %11111111, %11111111, %01111110, %00111100, %00011000, %00000000, %00011000
+    .byte %00111100, %01111110, %11111111, %11111111, %01111110, %00111100, %00011000, %00000000
+lookup_CE35:
+    .byte %00000000, %10000001, %11000011, %11100111, %11111111, %11100111, %11000011, %10000001
+    .byte %00000000, %00000000, %10000001, %11000011, %11100111, %11111111, %11100111, %11000011
+    .byte %10000001, %00000000, %00000000, %10000001, %11000011, %11100111, %11111111, %11100111
+    .byte %11000011, %10000001, %00000000, %00000000, %10000001, %11000011, %11100111, %11111111
+
+lookup_D379:
+    .byte 0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60
+    .byte 64, 60, 56, 52, 48, 44, 40, 36, 32, 28, 24, 20, 16, 12, 8, 4
+    .byte 0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60
+    .byte 64, 60, 56, 52, 48, 44, 40, 36, 32, 28, 24, 20, 16, 12, 8, 4
+
 ;C02C to C044
 .proc interrupt_handler
-        BIT $10                 ; Test bits in zero page location $10
+        BIT zp_flag0                 ; Test bits in zero page location $10
         BMI skip_dispatch       ; Branch if bit 7 is set (negative flag)
-        BIT $12                 ; Test bits in zero page location $12
+        BIT zp_func_hi                 ; Test bits in zero page location $12
         BPL save_registers      ; Branch if bit 7 is clear (positive flag)
-        JMP ($0011)             ; Indirect jump through address stored at $0011-$0012
+        JMP (zp_func_lo)             ; Indirect jump through address stored at $0011-$0012
 skip_dispatch:
 save_registers:
         PHA                     ; Push accumulator to stack
@@ -59,18 +174,18 @@ save_registers:
 ;c047-c06b
 .proc ppu_setup
         LDA #$00
-        STA $10                 ; Clear zero page flags
-        STA $12
+        STA zp_flag0                 ; Clear zero page flags
+        STA zp_func_hi
         LDX #$00
-        STX $18                 ; Initialize counters/indices
-        STX $17
+        STX zp_counter                 ; Initialize counters/indices
+        STX zp_target
 
         LDA $CDE6,X             ; Load data from lookup table
         AND #$0F                ; Extract lower nibble
-        STA $19
+        STA zp_lownib
         LDA $CDE6,X             ; Load same data again
         AND #$F0                ; Extract upper nibble
-        STA $1A
+        STA zp_highnib
 
         LDA #$A8                ; PPU control: NMI enabled, BG pattern table $1000
         STA PPU_CONTROL
@@ -81,26 +196,26 @@ save_registers:
 
 ;C073 - C0A6
 .proc counter_update
-        LDA $17                 ; Load target value
-        CMP $18                 ; Compare with current counter
+        LDA zp_target                 ; Load target value
+        CMP zp_counter                 ; Compare with current counter
         BEQ exit                ; If equal, skip update
 
-        DEC $18                 ; Decrement counter
-        LDA $18
+        DEC zp_counter                 ; Decrement counter
+        LDA zp_counter
         AND #$07                ; Check if counter is multiple of 8
         BNE exit                ; If not, skip table lookup
 
-        LDA $18                 ; Reload counter value
+        LDA zp_counter                 ; Reload counter value
         BCS skip_add            ; Branch if carry set from previous operations
         ADC #$11                ; Add offset
 skip_add:
         SBC #$08                ; Subtract 8 (carry should be set)
-        STA $18                 ; Store modified counter
+        STA zp_counter                 ; Store modified counter
 
-        LDA $17                 ; Load target value
+        LDA zp_target                 ; Load target value
         AND #$07                ; Mask to 3 bits
-        ORA $18                 ; Combine with counter
-        STA $18                 ; Store result
+        ORA zp_counter                 ; Combine with counter
+        STA zp_counter                 ; Store result
 
         LSR A                   ; Shift right 3 times to get table index
         LSR A
@@ -109,10 +224,10 @@ skip_add:
 
         LDA $CDE6,X             ; Load from data table
         AND #$0F                ; Extract lower nibble
-        STA $19
+        STA zp_lownib
         LDA $CDE6,X             ; Load again
         AND #$F0                ; Extract upper nibble
-        STA $1A
+        STA zp_highnib
 
         CLC                     ; Clear carry flag
 exit:
@@ -134,12 +249,12 @@ exit:
         STA PPU_ADDRESS
 
         LDA #$40                ; Initialize graphics counter
-        STA $23
+        STA zp_var23
 
 main_loop:
         LDX #$04                ; Initialize X counter
         LDY #$00                ; Initialize Y counter
-        STY $27                 ; Clear shift register
+        STY zp_var27                 ; Clear shift register
         BEQ setup_shift         ; Always branch (Y=0)
 
 shift_loop:
@@ -149,101 +264,101 @@ shift_loop:
 setup_shift:
         ASL A                   ; Shift accumulator left
         BCS shift_loop          ; Branch if carry set
-        STX $25                 ; Store X counter
-        STY $26                 ; Store Y counter
+        STX zp_var25                 ; Store X counter
+        STY zp_var26                 ; Store Y counter
 
         ASL A                   ; Shift again
         PHP                     ; Push processor status
         ASL A                   ; Shift once more
-        STA $28                 ; Store shifted value
+        STA zp_var28                 ; Store shifted value
 
         LDA #$FF                ; Set up mask value
         ADC #$00                ; Add carry
         EOR #$FF                ; Invert
-        STA $24                 ; Store mask
+        STA zp_var24                 ; Store mask
 
-        ASL $28                 ; Shift data left
-        ROL $27                 ; Rotate into high byte
+        ASL zp_var28                 ; Shift data left
+        ROL zp_var27                 ; Rotate into high byte
 
         LDY #$07                ; Set up counter for 8 bytes
         PLP                     ; Pull processor status
         BCC simple_render       ; Branch if no special processing
 
 complex_render:
-        ASL $28                 ; Shift data
-        LDA $27                 ; Get high byte
+        ASL zp_var28                 ; Shift data
+        LDA zp_var27                 ; Get high byte
         ROL A                   ; Rotate
         TAX                     ; Use as index
 
-        LDA $24                 ; Get mask
-        AND $CE31,X             ; Apply mask to lookup table
+        LDA zp_var24                 ; Get mask
+        AND lookup_CE31,X       ; Apply mask to lookup table
         STA PPU_VRAM_IO            ; Write to PPU
-        LDA $CE31,X             ; Get unmasked data
+        LDA lookup_CE31,X       ; Get unmasked data
         STA $001B,Y             ; Store in buffer
         DEY                     ; Decrement counter
 
-        LDA $24                 ; Get mask again
-        AND $CE35,X             ; Apply to second table
+        LDA zp_var24                 ; Get mask again
+        AND lookup_CE35,X       ; Apply to second table
         STA PPU_VRAM_IO            ; Write to PPU
-        LDA $CE35,X             ; Get unmasked data
+        LDA lookup_CE35,X       ; Get unmasked data
         STA $001B,Y             ; Store in buffer
         DEY                     ; Decrement counter
 
-        DEC $25                 ; Decrement line counter
+        DEC zp_var25                 ; Decrement line counter
         BNE complex_render      ; Continue if not done
 
-        DEC $26                 ; Decrement block counter
+        DEC zp_var26                 ; Decrement block counter
         BMI write_buffer        ; Branch if negative
 
-        LDA $02                 ; Get pattern data
+        LDA zp_tmp2                 ; Get pattern data
         STA PPU_VRAM_IO            ; Write to PPU
         LDA #$00                ; Clear value
         STA $001B,Y             ; Store in buffer
         DEY                     ; Decrement Y
         STA $001B,Y             ; Store again
-        LDA $03                 ; Get second pattern
+        LDA zp_tmp3                 ; Get second pattern
         STA PPU_VRAM_IO            ; Write to PPU
         DEY                     ; Decrement Y
         JMP complex_render + 2  ; Continue loop
 
 simple_render:
-        LDA $23                 ; Get counter value
-        STA $28                 ; Store as data
-        DEC $26                 ; Decrement block counter
+        LDA zp_var23                 ; Get counter value
+        STA zp_var28                 ; Store as data
+        DEC zp_var26                 ; Decrement block counter
         BMI final_shift         ; Branch if negative
 
-        LDA $00                 ; Get pattern data
+        LDA zp_tmp0                 ; Get pattern data
         STA PPU_VRAM_IO            ; Write to PPU
         LDA #$00                ; Clear value
         STA $001B,Y             ; Store in buffer
         DEY                     ; Decrement Y
         STA $001B,Y             ; Store again
-        LDA $01                 ; Get second pattern
+        LDA zp_tmp1                 ; Get second pattern
         STA PPU_VRAM_IO            ; Write to PPU
         DEY                     ; Decrement Y
         JMP simple_render + 2   ; Continue loop
 
 final_shift:
-        LSR $28                 ; Shift right
-        LDA $27                 ; Get high byte
+        LSR zp_var28                 ; Shift right
+        LDA zp_var27                 ; Get high byte
         ROL A                   ; Rotate
         TAX                     ; Use as index
 
-        LDA $24                 ; Get mask
-        AND $CE31,X             ; Apply mask
+        LDA zp_var24                 ; Get mask
+        AND lookup_CE31,X       ; Apply mask
         STA PPU_VRAM_IO            ; Write to PPU
-        LDA $CE31,X             ; Get unmasked data
+        LDA lookup_CE31,X       ; Get unmasked data
         STA $001B,Y             ; Store in buffer
         DEY                     ; Decrement counter
 
-        LDA $24                 ; Get mask again
-        AND $CE35,X             ; Apply to second table
+        LDA zp_var24                 ; Get mask again
+        AND lookup_CE35,X       ; Apply to second table
         STA PPU_VRAM_IO            ; Write to PPU
-        LDA $CE35,X             ; Get unmasked data
+        LDA lookup_CE35,X       ; Get unmasked data
         STA $001B,Y             ; Store in buffer
         DEY                     ; Decrement counter
 
-        DEC $25                 ; Decrement line counter
+        DEC zp_var25                 ; Decrement line counter
         BNE final_shift         ; Continue if not done
 
 write_buffer:
@@ -256,7 +371,7 @@ buffer_loop:
         BPL buffer_loop         ; Continue if not negative
 
         CLC                     ; Clear carry
-        LDA $23                 ; Get counter
+        LDA zp_var23                 ; Get counter
         ADC #$01                ; Increment
         CMP #$F0                ; Check if done
         BEQ fill_patterns       ; Branch if complete
@@ -264,8 +379,8 @@ buffer_loop:
 
 fill_patterns:
         ; Fill pattern data blocks
-        LDA $00                 ; Get first pattern
-        LDX $01                 ; Get second pattern
+        LDA zp_tmp0                 ; Get first pattern
+        LDX zp_tmp1                 ; Get second pattern
         LDY #$04                ; Set counter
 
 fill_loop1:
@@ -281,8 +396,8 @@ zero_loop1:
         DEX                     ; Decrement counter
         BNE zero_loop1          ; Continue loop
 
-        LDA $02                 ; Get third pattern
-        LDX $03                 ; Get fourth pattern
+        LDA zp_tmp2                 ; Get third pattern
+        LDX zp_tmp3                 ; Get fourth pattern
         LDY #$04                ; Set counter
 
 fill_loop2:
@@ -300,14 +415,14 @@ zero_loop2:
 
         ; Pattern arrangement loops
         LDA #$03                ; Set up counters
-        STA $26
+        STA zp_var26
         LDA #$01
-        STA $25
+        STA zp_var25
 
 arrange_loop1:
-        LDY $26                 ; Get counter
-        LDA $00                 ; Get pattern
-        LDX $01
+        LDY zp_var26                 ; Get counter
+        LDA zp_tmp0                 ; Get pattern
+        LDX zp_tmp1
 
 pattern_write1:
         STA PPU_VRAM_IO            ; Write pattern data
@@ -315,7 +430,7 @@ pattern_write1:
         DEY                     ; Decrement counter
         BNE pattern_write1      ; Continue loop
 
-        LDY $25                 ; Get second counter
+        LDY zp_var25                 ; Get second counter
         LDA #$00                ; Clear pattern
 
 clear_write1:
@@ -331,18 +446,18 @@ final_zero1:
         DEX                     ; Decrement counter
         BNE final_zero1         ; Continue loop
 
-        INC $25                 ; Increment counter
-        DEC $26                 ; Decrement counter
+        INC zp_var25                 ; Increment counter
+        DEC zp_var26                 ; Decrement counter
         BNE arrange_loop1       ; Continue if not done
 
         ; Second arrangement phase
         LDA #$03                ; Reset counters
-        STA $26
+        STA zp_var26
         LDA #$01
-        STA $25
+        STA zp_var25
 
 arrange_loop2:
-        LDY $25                 ; Get first counter
+        LDY zp_var25                 ; Get first counter
         LDA #$00                ; Clear pattern
 
 clear_write2:
@@ -351,9 +466,9 @@ clear_write2:
         DEY                     ; Decrement counter
         BNE clear_write2        ; Continue loop
 
-        LDY $26                 ; Get second counter
-        LDA $02                 ; Get pattern
-        LDX $03
+        LDY zp_var26                 ; Get second counter
+        LDA zp_tmp2                 ; Get pattern
+        LDX zp_tmp3
 
 pattern_write2:
         STA PPU_VRAM_IO            ; Write pattern data
@@ -368,8 +483,8 @@ final_zero2:
         DEX                     ; Decrement counter
         BNE final_zero2         ; Continue loop
 
-        INC $25                 ; Increment counter
-        DEC $26                 ; Decrement counter
+        INC zp_var25                 ; Increment counter
+        DEC zp_var26                 ; Decrement counter
         BNE arrange_loop2       ; Continue if not done
 
         RTS
@@ -378,21 +493,21 @@ final_zero2:
 ;c217 to c221
 .proc clear_variables
         LDA #$00                ; Load zero
-        STA $13                 ; Clear zero page variables
-        STA $14
-        STA $15
-        STA $16
+        STA zp_ctrl0                 ; Clear zero page variables
+        STA zp_ctrl1
+        STA zp_edge0
+        STA zp_edge1
         RTS
 .endproc
 
 ;c222 to c25a
 .proc read_controllers
-        LDA $13                 ; Create inverted masks for edge detection
+        LDA zp_ctrl0                 ; Create inverted masks for edge detection
         EOR #$FF
-        STA $15
-        LDA $14
+        STA zp_edge0
+        LDA zp_ctrl1
         EOR #$FF
-        STA $16
+        STA zp_edge1
 
         LDA #$01                ; Strobe controllers
         STA $4016
@@ -404,23 +519,23 @@ read_loop:
         LDA $4016               ; Read controller states
         AND #$03
         CMP #$01
-        ROL $13
+        ROL zp_ctrl0
 
         LDA $4017
         AND #$03
         CMP #$01
-        ROL $14
+        ROL zp_ctrl1
 
         DEX
         BPL read_loop
 
-        LDA $13                 ; Isolate newly pressed buttons
-        AND $15
-        STA $15
+        LDA zp_ctrl0                 ; Isolate newly pressed buttons
+        AND zp_edge0
+        STA zp_edge0
 
-        LDA $14
-        AND $16
-        STA $16
+        LDA zp_ctrl1
+        AND zp_edge1
+        STA zp_edge1
 
         RTS
 .endproc
@@ -442,18 +557,18 @@ clear_ppu:
         BNE clear_ppu
 
         LDA #$FF                ; Initialize pattern data
-        STA $00
+        STA zp_tmp0
         LDA #$FF
-        STA $01
+        STA zp_tmp1
         LDA #$33
-        STA $02
+        STA zp_tmp2
         LDA #$CC
-        STA $03
+        STA zp_tmp3
 
         JSR graphics_renderer               ; Setup graphics
 
         LDA #$10                ; Initialize game variables
-        STA $1C
+        STA zp_var1C
         LDA #$F9
         STA $0300
         LDA #$C9
@@ -474,53 +589,53 @@ sprite_init:
         BNE sprite_init
 
         LDA #$20                ; Setup rendering parameters
-        STA $1D
-        STA $1F
+        STA zp_var1D
+        STA zp_var1F
         LDA #$06
-        STA $1E
-        STA $20
+        STA zp_var1E
+        STA zp_var20
         LDA #$00
-        STA $21
+        STA zp_var21
         LDA #$A8
-        STA $1B
+        STA zp_ppuctrl
         LDA #$00
-        STA $2E
-        STA $2D
+        STA zp_var2E
+        STA zp_var2D
 
         LDA #$35                ; Setup function pointer
-        STA $11
+        STA zp_func_lo
         LDA #$CB
-        STA $12
+        STA zp_func_hi
 jumpC2CE:
         JSR read_controllers               ; Read controller input
 
-        LDA $13                 ; Handle B button (move left)
+        LDA zp_ctrl0                 ; Handle B button (move left)
         AND #$02
         BEQ check_a
-        LDX $21
+        LDX zp_var21
         DEX
         DEX
         CPX #$FE
         BNE store_x
         LDX #$A6
 store_x:
-        STX $21
+        STX zp_var21
 
 check_a:
-        LDA $13                 ; Handle A button (move right)
+        LDA zp_ctrl0                 ; Handle A button (move right)
         AND #$01
         BEQ check_select_start
-        LDX $21
+        LDX zp_var21
         INX
         INX
         CPX #$A8
         BNE store_x2
         LDX #$00
 store_x2:
-        STX $21
+        STX zp_var21
 
 check_select_start:
-        LDA $13                 ; Check Select/Start buttons
+        LDA zp_ctrl0                 ; Check Select/Start buttons
         AND #$0C
         BNE continue_game
         JMP ray_cast               ; Exit if no Select/Start
@@ -532,224 +647,224 @@ continue_game:
 ;c444 - c683
 ray_cast:
         SEC                     ; Calculate angle offsets
-        LDA $21
+        LDA zp_var21
         SBC #$0E
         BCS calc_angle1
         ADC #$A8
 calc_angle1:
-        STA $2A
+        STA zp_var2A
         ADC #$29
         CMP #$A8
         BCC calc_angle2
         SBC #$A8
 calc_angle2:
-        STA $29
+        STA zp_var29
 
-        LDA $2D                 ; Wait for specific flag
+        LDA zp_var2D                 ; Wait for specific flag
         BMI calc_angle2
 
         LDA #$8F                ; Initialize ray parameters
-        STA $22
-        STA $23
-        STA $24
+        STA zp_var22
+        STA zp_var23
+        STA zp_var24
         LDA #$00
-        STA $27
+        STA zp_var27
 
-        LDA $1B                 ; Setup rendering flags
+        LDA zp_ppuctrl                 ; Setup rendering flags
         AND #$03
         ASL A
         ASL A
         ORA #$20
-        STA $28
+        STA zp_var28
 
         LDA #$00
-        STA $2B
-        STA $2C
+        STA zp_var2B
+        STA zp_var2C
 
         LDX #$00                ; Load sine/cosine tables
 jump47B:
         LDA $D3CD,X
-        STA $38
+        STA zp_var38
         LDA $D3E9,X
-        STA $39
+        STA zp_var39
 
-        LDY $29                 ; Get direction data
+        LDY zp_var29                 ; Get direction data
         LDA $CE39,Y
-        STA $3A
+        STA zp_var3A
         ASL A
         TAY
-        LDA ($38),Y
-        STA $3C
+        LDA zp_var38,Y
+        STA zp_var3C
         LDA $D379,Y
-        STA $40
+        STA zp_var40
         INY
-        LDA ($38),Y
-        STA $3D
+        LDA zp_var38,Y
+        STA zp_var3D
         LDA $D379,Y
-        STA $41
+        STA zp_var41
 
-        LDY $2A                 ; Get second direction data
+        LDY zp_var2A                 ; Get second direction data
         LDA $CE39,Y
-        STA $3B
+        STA zp_var3B
         ASL A
         TAY
-        LDA ($38),Y
-        STA $3E
+        LDA zp_var38,Y
+        STA zp_var3E
         LDA $D379,Y
-        STA $42
+        STA zp_var42
         INY
-        LDA ($38),Y
-        STA $3F
+        LDA zp_var38,Y
+        STA zp_var3F
         LDA $D379,Y
-        STA $43
+        STA zp_var43
 
-        LDA $1E                 ; Calculate ray direction X
+        LDA zp_var1E                 ; Calculate ray direction X
         LSR A
-        LDA $1D
+        LDA zp_var1D
         ROR A
         LSR A
-        BIT $3A
+        BIT zp_var3A
         BPL calc_ray_x
         EOR #$80
         LDY #$FF
-        STY $44
+        STY zp_var44
         BNE setup_ray_x
 calc_ray_x:
         EOR #$FF
         LDY #$01
-        STY $44
+        STY zp_var44
         DEY
 setup_ray_x:
-        STY $46
-        STA $4B
-        STA $48
+        STY zp_var46
+        STA zp_var4B
+        STA zp_var48
 
         LDA #$00                ; Multiply ray direction
-        STA $4D
+        STA zp_var4D
 multiply_loop1:
-        LSR $48
+        LSR zp_var48
         BCC shift_result1
         TAY
         CLC
-        LDA $4D
-        ADC $3C
-        STA $4D
+        LDA zp_var4D
+        ADC zp_var3C
+        STA zp_var4D
         TYA
-        ADC $3D
+        ADC zp_var3D
 shift_result1:
         ROR A
-        ROR $4D
-        LSR $48
+        ROR zp_var4D
+        LSR zp_var48
         BEQ end_multiply1
         BCS multiply_loop1
         BCC shift_result1
 end_multiply1:
-        STA $4E
+        STA zp_var4E
 
-        LDA $20                 ; Calculate ray direction Y
+        LDA zp_var20                 ; Calculate ray direction Y
         LSR A
-        LDA $1F
+        LDA zp_var1F
         ROR A
         LSR A
-        BIT $3B
+        BIT zp_var3B
         BPL calc_ray_y
         EOR #$80
         LDY #$FE
-        STY $45
+        STY zp_var45
         LDY #$00
         BEQ setup_ray_y
 calc_ray_y:
         EOR #$FF
         LDY #$00
-        STY $45
+        STY zp_var45
         DEY
 setup_ray_y:
-        STY $47
-        STA $4C
-        STA $48
+        STY zp_var47
+        STA zp_var4C
+        STA zp_var48
 
         LDA #$00                ; Multiply ray direction Y
-        STA $4F
+        STA zp_var4F
 multiply_loop2:
-        LSR $48
+        LSR zp_var48
         BCC shift_result2
         TAY
         CLC
-        LDA $4F
-        ADC $3E
-        STA $4F
+        LDA zp_var4F
+        ADC zp_var3E
+        STA zp_var4F
         TYA
-        ADC $3F
+        ADC zp_var3F
 shift_result2:
         ROR A
-        ROR $4F
-        LSR $48
+        ROR zp_var4F
+        LSR zp_var48
         BEQ end_multiply2
         BCS multiply_loop2
         BCC shift_result2
 end_multiply2:
-        STA $50
+        STA zp_var50
 
-        LDA $1E                 ; Setup map lookup
+        LDA zp_var1E                 ; Setup map lookup
         LSR A
-        STA $55
-        LDA $20
+        STA zp_var55
+        LDA zp_var20
         LSR A
-        STA $56
+        STA zp_var56
         TAY
         LDA $0300,Y
-        STA $57
+        STA zp_var57
         LDA $0380,Y
-        STA $58
+        STA zp_var58
 
         LDA #$00                ; Initialize step counters
-        STA $49
-        STA $4A
+        STA zp_var49
+        STA zp_var4A
 
 ray_loop:
-        LDA $4D                 ; Compare ray positions
-        CMP $4F
-        LDA $4E
-        SBC $50
+        LDA zp_var4D                 ; Compare ray positions
+        CMP zp_var4F
+        LDA zp_var4E
+        SBC zp_var50
         BCS step_y
 
-        LDA $55                 ; Step X direction
-        ADC $44
-        STA $55
+        LDA zp_var55                 ; Step X direction
+        ADC zp_var44
+        STA zp_var55
         TAY
-        LDA ($57),Y
+        LDA zp_var57,Y
         BMI hit_wall_x
-        INC $49
+        INC zp_var49
         CLC
-        LDA $4D
-        ADC $3C
-        STA $4D
-        LDA $4E
-        ADC $3D
-        STA $4E
+        LDA zp_var4D
+        ADC zp_var3C
+        STA zp_var4D
+        LDA zp_var4E
+        ADC zp_var3D
+        STA zp_var4E
         JMP ray_loop
 hit_wall_y_short:
         JMP hit_wall_y
 step_y:
-        LDA $56                 ; Step Y direction
-        ADC $45
-        STA $56
+        LDA zp_var56                 ; Step Y direction
+        ADC zp_var45
+        STA zp_var56
         TAY
         LDA $0300,Y
-        STA $57
+        STA zp_var57
         LDA $0380,Y
-        STA $58
-        LDY $55
-        LDA ($57),Y
+        STA zp_var58
+        LDY zp_var55
+        LDA zp_var57,Y
         BMI hit_wall_y_short
-        INC $4A
+        INC zp_var4A
         CLC
-        LDA $4F
-        ADC $3E
-        STA $4F
-        LDA $50
-        ADC $3F
-        STA $50
+        LDA zp_var4F
+        ADC zp_var3E
+        STA zp_var4F
+        LDA zp_var50
+        ADC zp_var3F
+        STA zp_var50
         JMP ray_loop
 
 hit_wall_x:
@@ -758,75 +873,75 @@ hit_wall_x:
         LDA #$00
 store_wall_x:
         STA $0138,X
-        LDA $4D
+        LDA zp_var4D
         STA $0100,X
-        LDA $4E
+        LDA zp_var4E
         STA $011C,X
 
         LDA #$00                ; Calculate wall distance
-        STA $51
+        STA zp_var51
 distance_calc_x:
-        LSR $4B
+        LSR zp_var4B
         BCC shift_dist_x
         TAY
         CLC
-        LDA $51
-        ADC $40
-        STA $51
+        LDA zp_var51
+        ADC zp_var40
+        STA zp_var51
         TYA
-        ADC $41
+        ADC zp_var41
 shift_dist_x:
         ROR A
-        ROR $51
-        LSR $4B
+        ROR zp_var51
+        LSR zp_var4B
         BEQ end_dist_x
         BCS distance_calc_x
         BCC shift_dist_x
 end_dist_x:
-        STA $52
+        STA zp_var52
 
-        LDY $49                 ; Apply step count
+        LDY zp_var49                 ; Apply step count
         BEQ apply_direction_x
 step_apply_x:
         CLC
-        LDA $51
-        ADC $40
-        STA $51
-        LDA $52
-        ADC $41
-        STA $52
+        LDA zp_var51
+        ADC zp_var40
+        STA zp_var51
+        LDA zp_var52
+        ADC zp_var41
+        STA zp_var52
         DEY
         BNE step_apply_x
 
 apply_direction_x:
-        BIT $3B
+        BIT zp_var3B
         BMI sub_direction_x
         CLC
-        LDA $1F
-        ADC $51
-        STA $51
-        LDA $20
-        ADC $52
+        LDA zp_var1F
+        ADC zp_var51
+        STA zp_var51
+        LDA zp_var20
+        ADC zp_var52
         JMP finish_calc_x
 sub_direction_x:
         SEC
-        LDA $1F
-        SBC $51
-        STA $51
-        LDA $20
-        SBC $52
+        LDA zp_var1F
+        SBC zp_var51
+        STA zp_var51
+        LDA zp_var20
+        SBC zp_var52
 finish_calc_x:
         LSR A
-        ROR $51
-        CMP $56
+        ROR zp_var51
+        CMP zp_var56
         BEQ no_invert_x
-        LDA $51
+        LDA zp_var51
         EOR #$FF
         JMP apply_shading_x
 no_invert_x:
-        LDA $51
+        LDA zp_var51
 apply_shading_x:
-        EOR $46
+        EOR zp_var46
         LSR A
         LSR A
         LSR A
@@ -841,55 +956,55 @@ hit_wall_y:
         LDA #$00
 store_wall_y:
         STA $0138,X
-        LDA $4F
+        LDA zp_var4F
         STA $0100,X
-        LDA $50
+        LDA zp_var50
         STA $011C,X
 
         LDA #$00                ; Calculate wall distance Y
-        STA $53
+        STA zp_var53
 distance_calc_y:
-        LSR $4C
+        LSR zp_var4C
         BCC shift_dist_y
         TAY
         CLC
-        LDA $53
-        ADC $42
-        STA $53
+        LDA zp_var53
+        ADC zp_var42
+        STA zp_var53
         TYA
-        ADC $43
+        ADC zp_var43
 shift_dist_y:
         ROR A
-        ROR $53
-        LSR $4C
+        ROR zp_var53
+        LSR zp_var4C
         BEQ end_dist_y
         BCS distance_calc_y
         BCC shift_dist_y
 end_dist_y:
-        STA $54
+        STA zp_var54
 
-        LDY $4A                 ; Apply step count Y
+        LDY zp_var4A                 ; Apply step count Y
         BEQ apply_direction_y
 step_apply_y:
         CLC
-        LDA $53
-        ADC $42
-        STA $53
-        LDA $54
-        ADC $43
-        STA $54
+        LDA zp_var53
+        ADC zp_var42
+        STA zp_var53
+        LDA zp_var54
+        ADC zp_var43
+        STA zp_var54
         DEY
         BNE step_apply_y
 
 apply_direction_y:
-        BIT $3A
+        BIT zp_var3A
         BMI sub_direction_y
         CLC
-        LDA $1D
-        ADC $53
-        STA $53
-        LDA $1E
-        ADC $54
+        LDA zp_var1D
+        ADC zp_var53
+        STA zp_var53
+        LDA zp_var1E
+        ADC zp_var54
         JMP calculate_sprite_data
 sub_direction_y:
 
@@ -900,18 +1015,18 @@ continue_function:
 
 calculate_sprite_data:
     LSR A
-    ROR $53
-    CMP $55
+    ROR zp_var53
+    CMP zp_var55
     BEQ load_value
-    LDA $53
+    LDA zp_var53
     EOR #$FF
     JMP store_value
 
 load_value:
-    LDA $53
+    LDA zp_var53
 
 store_value:
-    EOR $47
+    EOR zp_var47
     LSR A
     LSR A
     LSR A
@@ -925,20 +1040,20 @@ store_value:
     BEQ process_complete
 jump6B2:
     ; Update Y coordinates
-    LDY $29
+    LDY zp_var29
     INY
     CPY #$A8
     BNE update_y1
     LDY #$00
 update_y1:
-    STY $29
-    LDY $2A
+    STY zp_var29
+    LDY zp_var2A
     INY
     CPY #$A8
     BNE update_y2
     LDY #$00
 update_y2:
-    STY $2A
+    STY zp_var2A
     JMP jump47B
 
 process_complete:
@@ -948,11 +1063,11 @@ process_complete:
     TAX
     LDA #$04
 wait_loop:
-    CMP $2E
+    CMP zp_var2E
     BEQ wait_loop
 
     LDA #$FF
-    STA $30
+    STA zp_buffer
 jump6DA:
     LDY $0138,X
     BNE call_lookup1
@@ -963,7 +1078,7 @@ call_lookup1:
 skip_lookup1:
     ASL A
     ASL A
-    STA $25
+    STA zp_var25
     LDY $0139,X
     BNE call_lookup2
     TYA
@@ -971,34 +1086,34 @@ skip_lookup1:
 call_lookup2:
     JSR variable_compare_check
 skip_lookup2:
-    ORA $25
+    ORA zp_var25
     TAY
     LDA $D605,Y
-    STA $25
-    BIT $30
+    STA zp_var25
+    BIT zp_buffer
     BPL setup_rotation
     AND #$33
-    STA $30
+    STA zp_buffer
 
 setup_rotation:
     LDA #$FC
-    ASL $25
+    ASL zp_var25
     ROL A
     ASL $0154,X
     ROL A
-    STA $59
+    STA zp_var59
 
     ; Binary search initialization
     LDY #$00
-    STY $5C
+    STY zp_var5C
     DEY
-    STY $5D
+    STY zp_var5D
 
     ; Binary search loop (8 iterations)
 binary_search:
     CLC
-    LDA $5C
-    ADC $5D
+    LDA zp_var5C
+    ADC zp_var5D
     ROR A
     TAY
     LDA $0100,X
@@ -1006,29 +1121,29 @@ binary_search:
     LDA $011C,X
     SBC $D505,Y
     BCC update_low
-    STY $5D
+    STY zp_var5D
     CLC
     BCC continue_search
 update_low:
     INY
-    STY $5C
+    STY zp_var5C
 continue_search:
     ; [Repeat pattern 7 more times - condensed for clarity]
 
     ; Get sprite data
     LDY $0138,X
-    LDA $CA7D,Y
-    STA $38
-    LDA $CA81,Y
-    STA $39
+    LDA lookup_CA79,Y
+    STA zp_var38
+    LDA lookup_CA79+($CA7D-$CA79),Y
+    STA zp_var39
     LDY $0154,X
-    LDA ($38),Y
-    STA $5B
+    LDA lookup_CA79+($CA7D-$CA79),Y
+    STA zp_var5B
     INY
-    LDA ($38),Y
-    STA $5A
+    LDA lookup_CA79+($CA7D-$CA79),Y
+    STA zp_var5A
 
-    LDA $5C
+    LDA zp_var5C
     CMP #$FF
     BNE normal_render
 
@@ -1037,15 +1152,15 @@ continue_search:
     CPY $D504
     BCS normal_render
 
-    STX $26
-    LDX $2B
-    LDA $59
+    STX zp_var26
+    LDX zp_var2B
+    LDA zp_var59
     ORA #$04
     STA $0400,X
     STA $0480,X
 
     ; Process high byte
-    LDY $5A
+    LDY zp_var5A
     CPY #$80
     ROL $0400,X
     CPY #$80
@@ -1056,7 +1171,7 @@ continue_search:
     ROL $0400,X
 
     ; Process low byte
-    LDY $5B
+    LDY zp_var5B
     CPY #$80
     ROL $0480,X
     CPY #$80
@@ -1091,27 +1206,27 @@ continue_search:
     JMP sprite_complete
 
 normal_render:
-    STX $26
-    LDX $2B
+    STX zp_var26
+    LDX zp_var2B
     CMP #$21
     BCC clamp_value
     LDA #$20
 clamp_value:
-    STA $5D
+    STA zp_var5D
     LSR A
     LSR A
-    STA $5E
+    STA zp_var5E
     EOR #$FF
     SEC
     ADC #$08
-    STA $5F
-    LDA $5D
+    STA zp_var5F
+    LDA zp_var5D
     AND #$03
-    STA $60
-    LDY $26
+    STA zp_var60
+    LDY zp_var26
     LDA $0138,Y
     BNE render_sprite_column
-    LDY $5E
+    LDY zp_var5E
     JMP column_done
 
 ; This function performs sprite data calculation and rendering
@@ -1119,36 +1234,36 @@ clamp_value:
 
 ;c8ca - c96e
 render_sprite_column:
-    LDA $5C
+    LDA zp_var5C
     EOR #$FF
-    STA $61
-    LDY $5E
+    STA zp_var61
+    LDY zp_var5E
     BNE column_loop
     JMP column_done
 
 column_loop:
-    LDA $59
+    LDA zp_var59
     STA $0400,X
     ORA #$04
     STA $0480,X
 
     ; Process first pixel pair
     SEC
-    LDA $61
+    LDA zp_var61
     ADC #$07
     BCC check_pixel1
 shift_data1:
-    ASL $5A
-    ASL $5B
+    ASL zp_var5A
+    ASL zp_var5B
     SEC
-    SBC $5C
+    SBC zp_var5C
     BCS shift_data1
 
 check_pixel1:
-    LDY $5A
+    LDY zp_var5A
     CPY #$80
     ROL $0400,X
-    LDY $5B
+    LDY zp_var5B
     CPY #$80
     ROL $0480,X
 
@@ -1156,17 +1271,17 @@ check_pixel1:
     ADC #$07
     BCC check_pixel2
 shift_data2:
-    ASL $5A
-    ASL $5B
+    ASL zp_var5A
+    ASL zp_var5B
     SEC
-    SBC $5C
+    SBC zp_var5C
     BCS shift_data2
 
 check_pixel2:
-    LDY $5A
+    LDY zp_var5A
     CPY #$80
     ROL $0400,X
-    LDY $5B
+    LDY zp_var5B
     CPY #$80
     ROL $0480,X
 
@@ -1174,17 +1289,17 @@ check_pixel2:
     ADC #$07
     BCC check_pixel3
 shift_data3:
-    ASL $5A
-    ASL $5B
+    ASL zp_var5A
+    ASL zp_var5B
     SEC
-    SBC $5C
+    SBC zp_var5C
     BCS shift_data3
 
 check_pixel3:
-    LDY $5A
+    LDY zp_var5A
     CPY #$80
     ROL $0400,X
-    LDY $5B
+    LDY zp_var5B
     CPY #$80
     ROL $0480,X
 
@@ -1192,21 +1307,21 @@ check_pixel3:
     ADC #$07
     BCC check_pixel4
 shift_data4:
-    ASL $5A
-    ASL $5B
+    ASL zp_var5A
+    ASL zp_var5B
     SEC
-    SBC $5C
+    SBC zp_var5C
     BCS shift_data4
 
 check_pixel4:
-    LDY $5A
+    LDY zp_var5A
     CPY #$80
     ROL $0400,X
-    LDY $5B
+    LDY zp_var5B
     CPY #$80
     ROL $0480,X
 
-    STA $61
+    STA zp_var61
 
     ; Apply palette lookup
     LDY $0400,X
@@ -1214,15 +1329,15 @@ check_pixel4:
     STA $0400,X
 
     INX
-    DEC $5E
+    DEC zp_var5E
     BEQ column_done
     JMP column_loop
 
 column_done:
-    LDY $26
+    LDY zp_var26
     LDA $0138,Y
     BNE render_sprite_remainder
-    LDY $60
+    LDY zp_var60
     JMP fill_empty_columns
 
 
@@ -1234,42 +1349,42 @@ column_done:
 
 ;c983 -c9f6
 render_sprite_remainder:
-    LDY $60
+    LDY zp_var60
     BEQ fill_empty_columns
-    DEC $5F
+    DEC zp_var5F
 
 pixel_loop:
-    LDA $59
+    LDA zp_var59
     STA $0400,X
     ORA #$04
     STA $0480,X
 
     ; Extract single pixel
     SEC
-    LDA $61
+    LDA zp_var61
     ADC #$07
     BCC check_pixel
 shift_data:
-    ASL $5A
-    ASL $5B
+    ASL zp_var5A
+    ASL zp_var5B
     SEC
-    SBC $5C
+    SBC zp_var5C
     BCS shift_data
 
 check_pixel:
-    LDY $5A
+    LDY zp_var5A
     CPY #$80
     ROL $0400,X
-    LDY $5B
+    LDY zp_var5B
     CPY #$80
     ROL $0480,X
 
-    DEC $60
+    DEC zp_var60
     BNE pixel_loop
     INX
 
 fill_empty_columns:
-    LDY $5F
+    LDY zp_var5F
     BEQ sprite_complete
 
 fill_loop:
@@ -1282,8 +1397,8 @@ fill_loop:
     BNE fill_loop
 
 sprite_complete:
-    STX $2B
-    LDX $26
+    STX zp_var2B
+    LDX zp_var26
     INX
     TXA
     LSR A
@@ -1297,21 +1412,21 @@ check_next_bit:
 
 store_result:
     TAY
-    LDA $25
-    ORA $30
+    LDA zp_var25
+    ORA zp_buffer
     STA $0030,Y
-    INC $2E
+    INC zp_var2E
     CPX #$1C
     BEQ process_completed
 
-    LDA $2B
+    LDA zp_var2B
     AND #$7F
-    STA $2B
+    STA zp_var2B
     JMP jump6B2
 
 process_completed:
     JSR counter_update
-    DEC $2D
+    DEC zp_var2D
     JMP jumpC2CE
 .endproc
 
@@ -1329,23 +1444,23 @@ process_completed:
     TYA
     PHA
 
-    LDA $2E
+    LDA zp_var2E
     BEQ check_frame_flag
     JMP upload_graphics_data
 
 check_frame_flag:
-    BIT $2D
+    BIT zp_var2D
     BMI setup_palettes
     JMP restore_state
 
 setup_palettes:
-    INC $2D
-    LDA $1B
+    INC zp_var2D
+    LDA zp_ppuctrl
     EOR #$03
-    STA $1B
+    STA zp_ppuctrl
 
     ; Set PPU address to $23C0 (attribute table)
-    LDA $28
+    LDA zp_var28
     ORA #$03
     STA PPU_ADDRESS
     LDA #$C0
@@ -1357,19 +1472,19 @@ setup_palettes:
     ; Upload 4 blocks of 7 bytes + 1 zero byte
     LDX #$04
 upload_block:
-    LDA $31
+    LDA zp_var31
     STA PPU_VRAM_IO
-    LDA $32
+    LDA zp_var32
     STA PPU_VRAM_IO
-    LDA $33
+    LDA zp_var33
     STA PPU_VRAM_IO
-    LDA $34
+    LDA zp_var34
     STA PPU_VRAM_IO
-    LDA $35
+    LDA zp_var35
     STA PPU_VRAM_IO
-    LDA $36
+    LDA zp_var36
     STA PPU_VRAM_IO
-    LDA $37
+    LDA zp_var37
     STA PPU_VRAM_IO
     LDA #$00
     STA PPU_VRAM_IO
@@ -1378,7 +1493,7 @@ upload_block:
 
     ; Setup palette colors
     LDX #$0F
-    LDY $1C
+    LDY zp_var1C
     LDA #$3F
     STA PPU_ADDRESS
     LDA #$00
@@ -1392,21 +1507,21 @@ upload_block:
     STA PPU_VRAM_IO
     STX PPU_VRAM_IO
     STY PPU_VRAM_IO
-    LDA $22
+    LDA zp_var22
     STA PPU_VRAM_IO
-    LDA $24
-    STA PPU_VRAM_IO
-    STX PPU_VRAM_IO
-    STY PPU_VRAM_IO
-    LDA $23
-    STA PPU_VRAM_IO
-    LDA $22
+    LDA zp_var24
     STA PPU_VRAM_IO
     STX PPU_VRAM_IO
     STY PPU_VRAM_IO
-    LDA $24
+    LDA zp_var23
     STA PPU_VRAM_IO
-    LDA $23
+    LDA zp_var22
+    STA PPU_VRAM_IO
+    STX PPU_VRAM_IO
+    STY PPU_VRAM_IO
+    LDA zp_var24
+    STA PPU_VRAM_IO
+    LDA zp_var23
     STA PPU_VRAM_IO
 
     LDA #$0E
@@ -1417,12 +1532,12 @@ upload_graphics_data:
     LDA #$AC
     STA PPU_CONTROL
     LDA #$03
-    STA $2F
-    LDX $2C
-    LDY $27
+    STA zp_var2F
+    LDX zp_var2C
+    LDY zp_var27
 
 upload_row:
-    LDA $28
+    LDA zp_var28
     STA PPU_ADDRESS
     STY PPU_ADDRESS
     INY
@@ -1464,7 +1579,7 @@ upload_row:
     STA PPU_VRAM_IO
 
     ; Upload second row
-    LDA $28
+    LDA zp_var28
     STA PPU_ADDRESS
     STY PPU_ADDRESS
     INY
@@ -1504,7 +1619,7 @@ upload_row:
     STA PPU_VRAM_IO
 
     ; Upload third row
-    LDA $28
+    LDA zp_var28
     STA PPU_ADDRESS
     STY PPU_ADDRESS
     INY
@@ -1544,7 +1659,7 @@ upload_row:
     STA PPU_VRAM_IO
 
     ; Upload fourth row
-    LDA $28
+    LDA zp_var28
     STA PPU_ADDRESS
     STY PPU_ADDRESS
     INY
@@ -1589,18 +1704,18 @@ upload_row:
     ADC #$20
     AND #$7F
     TAX
-    DEC $2E
+    DEC zp_var2E
     BEQ upload_complete
-    DEC $2F
+    DEC zp_var2F
     BEQ upload_complete
     JMP upload_row
 
 upload_complete:
-    STY $27
-    STX $2C
+    STY zp_var27
+    STX zp_var2C
 
 restore_state:
-    LDA $1B
+    LDA zp_ppuctrl
     STA PPU_CONTROL
     LDA #$F0
     STA PPU_SCROLL
@@ -1622,21 +1737,21 @@ restore_state:
 
 ;cdbe - cddb
 .proc variable_compare_check
-    LDA $CA79,Y         ; Load value from lookup table
-    BIT $22             ; Test sign bit of variable $22
+    LDA lookup_CA79,Y   ; Load value from lookup table
+    BIT zp_var22             ; Test sign bit of variable $22
     BMI store_and_exit  ; Branch if negative
-    CMP $22             ; Compare with variable $22
+    CMP zp_var22             ; Compare with variable $22
     BEQ return_zero     ; Return 0 if equal
-    BIT $23             ; Test sign bit of variable $23
+    BIT zp_var23           ; Test sign bit of variable $23
     BMI skip_var23      ; Branch if negative
-    CMP $23             ; Compare with variable $23
+    CMP zp_var23             ; Compare with variable $23
     BEQ skip_var23_exit ; Return 0 if equal
-    BIT $24             ; Test sign bit of variable $24
+    BIT zp_var24             ; Test sign bit of variable $24
     BMI skip_var24      ; Branch if negative
     BPL store_value     ; Always branch (unconditional)
 
 store_and_exit:
-    STA $22             ; Store A in variable $22
+    STA zp_var22             ; Store A in variable $22
 return_zero:
     LDA #$00            ; Load 0
     RTS                 ; Return
@@ -1654,7 +1769,7 @@ store_value:
 
 ;cddc- cde0
 store_and_return_one:
-    STA $23             ; Store A in variable $23
+    STA zp_var23             ; Store A in variable $23
 jumpDDE:
     LDA #$01            ; Load 1
     RTS                 ; Return
@@ -1662,8 +1777,56 @@ jumpDDE:
 
 ;cde1 - cde5
 store_and_return_two:
-    STA $24             ; Store A in variable $24
+    STA zp_var24             ; Store A in variable $24
 jumpDE3:
     LDA #$02            ; Load 2
     RTS                 ; Return
+.endproc
+
+.proc nmi_handler
+    RTI
+.endproc
+
+.proc irq_handler
+    RTI
+.endproc
+
+.segment "OAM"
+oam: .res 256	; sprite OAM data
+
+.segment "CHARS"
+    .res $2000, $00            ; Reserve 8KB for CHR data (fill with zeros)
+
+; Add NMI and IRQ handler stubs if not present
+
+
+.segment "VECTORS"
+    .word nmi_handler          ; NMI vector
+    .word reset_handler         ; RESET vector
+    .word irq_handler          ; IRQ/BRK vector
+
+.segment "STARTUP"
+;C000 to C029
+.proc reset_handler
+        SEI                     ; Disable interrupts (critical for setup)
+        CLD                     ; Clear decimal mode (NES doesn't use BCD)
+        LDX #$00                ; Load X register with 0
+        STX PPU_CONTROL         ; Disable PPU control register ($2000)
+        STX PPU_MASK            ; Disable PPU mask register ($2001) - screen off
+        DEX                     ; Decrement X (now $FF)
+        TXS                     ; Set stack pointer to $FF (top of stack page)
+        LDA #$40                ; Load accumulator with $40 (bit 6 set)
+        STA $4017               ; Disable frame counter IRQ in APU
+        LDA #$00                ; Load accumulator with 0
+        STA APU_DM_CONTROL      ; Disable DMC (Delta Modulation Channel)
+        BIT PPU_STATUS          ; Read PPU status to clear VBlank flag
+wait_vblank1:
+        BIT PPU_STATUS          ; Check PPU status register
+        BPL wait_vblank1        ; Branch if VBlank flag not set (bit 7 = 0)
+wait_vblank2:
+        BIT PPU_STATUS          ; Check PPU status register again
+        BPL wait_vblank2        ; Branch if VBlank flag not set (bit 7 = 0)
+        JSR empty_function               ; Call function at $C046 (outside range)
+        JSR ppu_setup               ; Call function at $C047 (outside range)
+        JMP game_init               ; Jump to $C25B (outside range)
 .endproc
