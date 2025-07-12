@@ -277,6 +277,7 @@ STA SPRITE_BALL_ADDR + SPRITE_OFFSET_X
   RTS
 
 .endproc
+
 .proc update_ball
 ; now move our ball
  	lda ball_y  ; get the current Y

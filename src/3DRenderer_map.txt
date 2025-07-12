@@ -1,13 +1,13 @@
 Modules list:
 -------------
 3DRenderer.o:
-    CODE              Offs=000000  Size=000B4B  Align=00001  Fill=0000
+    CODE              Offs=000000  Size=000B8B  Align=00001  Fill=0000
     ZEROPAGE          Offs=000000  Size=000059  Align=00001  Fill=0000
     HEADER            Offs=000000  Size=000008  Align=00001  Fill=0000
     OAM               Offs=000000  Size=000100  Align=00001  Fill=0000
     CHARS             Offs=000000  Size=002000  Align=00001  Fill=0000
     VECTORS           Offs=000000  Size=000006  Align=00001  Fill=0000
-    STARTUP           Offs=000000  Size=00002C  Align=00001  Fill=0000
+    STARTUP           Offs=000000  Size=00014C  Align=00001  Fill=0000
 
 
 Segment list:
@@ -18,8 +18,8 @@ CHARS                 000000  001FFF  002000  00001
 HEADER                000000  000007  000008  00001
 ZEROPAGE              000000  000058  000059  00001
 OAM                   000200  0002FF  000100  00001
-STARTUP               008000  00802B  00002C  00001
-CODE                  00802C  008B76  000B4B  00001
+STARTUP               008000  00814B  00014C  00001
+CODE                  00814C  008CD6  000B8B  00001
 VECTORS               00FFFA  00FFFF  000006  00001
 
 

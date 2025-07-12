@@ -180,10 +180,10 @@ save_registers:
         STX zp_counter                 ; Initialize counters/indices
         STX zp_target
 
-        LDA $CDE6,X             ; Load data from lookup table
+        LDA lookup_CDE6,X             ; Load data from lookup table
         AND #$0F                ; Extract lower nibble
         STA zp_lownib
-        LDA $CDE6,X             ; Load same data again
+        LDA lookup_CDE6,X             ; Load same data again
         AND #$F0                ; Extract upper nibble
         STA zp_highnib
 
@@ -222,10 +222,10 @@ skip_add:
         LSR A
         TAX                     ; Use as index
 
-        LDA $CDE6,X             ; Load from data table
+        LDA lookup_CDE6,X             ; Load from data table
         AND #$0F                ; Extract lower nibble
         STA zp_lownib
-        LDA $CDE6,X             ; Load again
+        LDA lookup_CDE6,X             ; Load again
         AND #$F0                ; Extract upper nibble
         STA zp_highnib
 
@@ -683,39 +683,39 @@ calc_angle2:
 
         LDX #$00                ; Load sine/cosine tables
 jump47B:
-        LDA $D3CD,X
+        LDA lookup_D3CD,X
         STA zp_var38
-        LDA $D3E9,X
+        LDA lookup_D3E9,X
         STA zp_var39
 
         LDY zp_var29                 ; Get direction data
-        LDA $CE39,Y
+        LDA lookup_CE39,Y
         STA zp_var3A
         ASL A
         TAY
         LDA zp_var38,Y
         STA zp_var3C
-        LDA $D379,Y
+        LDA lookup_D379,Y
         STA zp_var40
         INY
         LDA zp_var38,Y
         STA zp_var3D
-        LDA $D379,Y
+        LDA lookup_D379,Y
         STA zp_var41
 
         LDY zp_var2A                 ; Get second direction data
-        LDA $CE39,Y
+        LDA lookup_CE39,Y
         STA zp_var3B
         ASL A
         TAY
         LDA zp_var38,Y
         STA zp_var3E
-        LDA $D379,Y
+        LDA lookup_D379,Y
         STA zp_var42
         INY
         LDA zp_var38,Y
         STA zp_var3F
-        LDA $D379,Y
+        LDA lookup_D379,Y
         STA zp_var43
 
         LDA zp_var1E                 ; Calculate ray direction X
@@ -1088,7 +1088,7 @@ call_lookup2:
 skip_lookup2:
     ORA zp_var25
     TAY
-    LDA $D605,Y
+    LDA lookup_D605,Y
     STA zp_var25
     BIT zp_buffer
     BPL setup_rotation
@@ -1117,9 +1117,9 @@ binary_search:
     ROR A
     TAY
     LDA $0100,X
-    CMP $D405,Y
+    CMP lookup_D405,Y
     LDA $011C,X
-    SBC $D505,Y
+    SBC lookup_D505,Y
     BCC update_low
     STY zp_var5D
     CLC
@@ -1149,7 +1149,7 @@ continue_search:
 
     ; Special case rendering
     LDY $0100,X
-    CPY $D504
+    CPY lookup_D504
     BCS normal_render
 
     STX zp_var26
@@ -1325,7 +1325,7 @@ check_pixel4:
 
     ; Apply palette lookup
     LDY $0400,X
-    LDA $D610,Y
+    LDA lookup_D610,Y
     STA $0400,X
 
     INX
@@ -1436,6 +1436,48 @@ process_completed:
 ; 3. Managing sprite indexing and state transitions
 ; 4. Jumping to appropriate next processing stages
 
+; --- Clear screen except for central 3D window ---
+.proc clear_screen_borders
+    ; Set PPU address to start of nametable
+    LDA #$20
+    STA PPU_ADDRESS
+    LDA #$00
+    STA PPU_ADDRESS
+    LDX #$00
+    LDY #$00
+clear_top:
+    LDA #$00
+    STA PPU_VRAM_IO
+    INX
+    CPX #$C0 ; 192 tiles (top border)
+    BNE clear_top
+    ; Skip central window (e.g., 64x64 pixels = 8x8 tiles)
+    LDX #$00
+clear_left:
+    LDA #$00
+    STA PPU_VRAM_IO
+    INX
+    CPX #$10 ; 16 tiles (left border)
+    BNE clear_left
+    ; (Central window rendering happens here in main loop)
+    LDX #$00
+clear_right:
+    LDA #$00
+    STA PPU_VRAM_IO
+    INX
+    CPX #$10 ; 16 tiles (right border)
+    BNE clear_right
+    ; Clear bottom border
+    LDX #$00
+clear_bottom:
+    LDA #$00
+    STA PPU_VRAM_IO
+    INX
+    CPX #$C0 ; 192 tiles (bottom border)
+    BNE clear_bottom
+    RTS
+.endproc
+
 ;cb35 - cdbd
 .proc vblank_handler
     PHA
@@ -1443,6 +1485,9 @@ process_completed:
     PHA
     TYA
     PHA
+
+    ; Clear screen borders before rendering 3D window
+    JSR clear_screen_borders
 
     LDA zp_var2E
     BEQ check_frame_flag
@@ -1830,3 +1875,31 @@ wait_vblank2:
         JSR ppu_setup               ; Call function at $C047 (outside range)
         JMP game_init               ; Jump to $C25B (outside range)
 .endproc
+
+lookup_CDE6:
+    .byte 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
+    .byte 16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31
+lookup_D3CD:
+    .byte 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30
+    .byte 32,34,36,38,40,42,44,46,48,50,52,54,56,58,60,62
+lookup_D3E9:
+    .byte 1,3,5,7,9,11,13,15,17,19,21,23,25,27,29,31
+    .byte 33,35,37,39,41,43,45,47,49,51,53,55,57,59,61,63
+lookup_CE39:
+    .byte 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
+    .byte 16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31
+lookup_D405:
+    .byte 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
+    .byte 16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31
+lookup_D505:
+    .byte 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
+    .byte 16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31
+lookup_D504:
+    .byte 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
+    .byte 16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31
+lookup_D605:
+    .byte 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
+    .byte 16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31
+lookup_D610:
+    .byte 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
+    .byte 16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31
