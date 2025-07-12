@@ -1,3 +1,6 @@
+.include "nes.inc"
+.include "macros.inc"
+
 
 .segment "STARTUP"
 ;C000 to C029
@@ -174,14 +177,14 @@ complex_render:
 
         LDA $24                 ; Get mask
         AND $CE31,X             ; Apply mask to lookup table
-        STA PPU_DATA            ; Write to PPU
+        STA PPU_VRAM_IO            ; Write to PPU
         LDA $CE31,X             ; Get unmasked data
         STA $001B,Y             ; Store in buffer
         DEY                     ; Decrement counter
 
         LDA $24                 ; Get mask again
         AND $CE35,X             ; Apply to second table
-        STA PPU_DATA            ; Write to PPU
+        STA PPU_VRAM_IO            ; Write to PPU
         LDA $CE35,X             ; Get unmasked data
         STA $001B,Y             ; Store in buffer
         DEY                     ; Decrement counter
@@ -193,13 +196,13 @@ complex_render:
         BMI write_buffer        ; Branch if negative
 
         LDA $02                 ; Get pattern data
-        STA PPU_DATA            ; Write to PPU
+        STA PPU_VRAM_IO            ; Write to PPU
         LDA #$00                ; Clear value
         STA $001B,Y             ; Store in buffer
         DEY                     ; Decrement Y
         STA $001B,Y             ; Store again
         LDA $03                 ; Get second pattern
-        STA PPU_DATA            ; Write to PPU
+        STA PPU_VRAM_IO            ; Write to PPU
         DEY                     ; Decrement Y
         JMP complex_render + 2  ; Continue loop
 
@@ -210,13 +213,13 @@ simple_render:
         BMI final_shift         ; Branch if negative
 
         LDA $00                 ; Get pattern data
-        STA PPU_DATA            ; Write to PPU
+        STA PPU_VRAM_IO            ; Write to PPU
         LDA #$00                ; Clear value
         STA $001B,Y             ; Store in buffer
         DEY                     ; Decrement Y
         STA $001B,Y             ; Store again
         LDA $01                 ; Get second pattern
-        STA PPU_DATA            ; Write to PPU
+        STA PPU_VRAM_IO            ; Write to PPU
         DEY                     ; Decrement Y
         JMP simple_render + 2   ; Continue loop
 
@@ -228,14 +231,14 @@ final_shift:
 
         LDA $24                 ; Get mask
         AND $CE31,X             ; Apply mask
-        STA PPU_DATA            ; Write to PPU
+        STA PPU_VRAM_IO            ; Write to PPU
         LDA $CE31,X             ; Get unmasked data
         STA $001B,Y             ; Store in buffer
         DEY                     ; Decrement counter
 
         LDA $24                 ; Get mask again
         AND $CE35,X             ; Apply to second table
-        STA PPU_DATA            ; Write to PPU
+        STA PPU_VRAM_IO            ; Write to PPU
         LDA $CE35,X             ; Get unmasked data
         STA $001B,Y             ; Store in buffer
         DEY                     ; Decrement counter
@@ -248,7 +251,7 @@ write_buffer:
 
 buffer_loop:
         LDA $001B,Y             ; Load from buffer
-        STA PPU_DATA            ; Write to PPU
+        STA PPU_VRAM_IO            ; Write to PPU
         DEY                     ; Decrement counter
         BPL buffer_loop         ; Continue if not negative
 
@@ -266,15 +269,15 @@ fill_patterns:
         LDY #$04                ; Set counter
 
 fill_loop1:
-        STA PPU_DATA            ; Write first pattern
-        STX PPU_DATA            ; Write second pattern
+        STA PPU_VRAM_IO            ; Write first pattern
+        STX PPU_VRAM_IO            ; Write second pattern
         DEY                     ; Decrement counter
         BNE fill_loop1          ; Continue loop
 
         LDX #$08                ; Set counter for zeros
 
 zero_loop1:
-        STY PPU_DATA            ; Write zero (Y=0)
+        STY PPU_VRAM_IO            ; Write zero (Y=0)
         DEX                     ; Decrement counter
         BNE zero_loop1          ; Continue loop
 
@@ -283,15 +286,15 @@ zero_loop1:
         LDY #$04                ; Set counter
 
 fill_loop2:
-        STA PPU_DATA            ; Write third pattern
-        STX PPU_DATA            ; Write fourth pattern
+        STA PPU_VRAM_IO            ; Write third pattern
+        STX PPU_VRAM_IO            ; Write fourth pattern
         DEY                     ; Decrement counter
         BNE fill_loop2          ; Continue loop
 
         LDX #$08                ; Set counter for zeros
 
 zero_loop2:
-        STY PPU_DATA            ; Write zero (Y=0)
+        STY PPU_VRAM_IO            ; Write zero (Y=0)
         DEX                     ; Decrement counter
         BNE zero_loop2          ; Continue loop
 
@@ -307,8 +310,8 @@ arrange_loop1:
         LDX $01
 
 pattern_write1:
-        STA PPU_DATA            ; Write pattern data
-        STX PPU_DATA
+        STA PPU_VRAM_IO            ; Write pattern data
+        STX PPU_VRAM_IO
         DEY                     ; Decrement counter
         BNE pattern_write1      ; Continue loop
 
@@ -316,15 +319,15 @@ pattern_write1:
         LDA #$00                ; Clear pattern
 
 clear_write1:
-        STA PPU_DATA            ; Write zeros
-        STA PPU_DATA
+        STA PPU_VRAM_IO            ; Write zeros
+        STA PPU_VRAM_IO
         DEY                     ; Decrement counter
         BNE clear_write1        ; Continue loop
 
         LDX #$08                ; Fill with zeros
 
 final_zero1:
-        STY PPU_DATA            ; Write zero
+        STY PPU_VRAM_IO            ; Write zero
         DEX                     ; Decrement counter
         BNE final_zero1         ; Continue loop
 
@@ -343,8 +346,8 @@ arrange_loop2:
         LDA #$00                ; Clear pattern
 
 clear_write2:
-        STA PPU_DATA            ; Write zeros
-        STA PPU_DATA
+        STA PPU_VRAM_IO            ; Write zeros
+        STA PPU_VRAM_IO
         DEY                     ; Decrement counter
         BNE clear_write2        ; Continue loop
 
@@ -353,15 +356,15 @@ clear_write2:
         LDX $03
 
 pattern_write2:
-        STA PPU_DATA            ; Write pattern data
-        STX PPU_DATA
+        STA PPU_VRAM_IO            ; Write pattern data
+        STX PPU_VRAM_IO
         DEY                     ; Decrement counter
         BNE pattern_write2      ; Continue loop
 
         LDX #$08                ; Fill with zeros
 
 final_zero2:
-        STY PPU_DATA            ; Write zero
+        STY PPU_VRAM_IO            ; Write zero
         DEX                     ; Decrement counter
         BNE final_zero2         ; Continue loop
 
@@ -424,7 +427,7 @@ read_loop:
 
 ;C25B - C2FB
 .proc game_init
-        JSR $C217               ; Clear variables
+        JSR clear_variables              ; Clear variables
 
         LDX #$00                ; Clear PPU memory
         STX PPU_ADDRESS
@@ -447,7 +450,7 @@ clear_ppu:
         LDA #$CC
         STA $03
 
-        JSR $C0A9               ; Setup graphics
+        JSR graphics_renderer               ; Setup graphics
 
         LDA #$10                ; Initialize game variables
         STA $1C
@@ -489,7 +492,7 @@ sprite_init:
         LDA #$CB
         STA $12
 jumpC2CE:
-        JSR $C222               ; Read controller input
+        JSR read_controllers               ; Read controller input
 
         LDA $13                 ; Handle B button (move left)
         AND #$02
@@ -520,14 +523,14 @@ check_select_start:
         LDA $13                 ; Check Select/Start buttons
         AND #$0C
         BNE continue_game
-        JMP $C444               ; Exit if no Select/Start
+        JMP ray_cast               ; Exit if no Select/Start
 
 continue_game:
         ; Function continues...
-.endproc
+
 
 ;c444 - c683
-.proc ray_cast
+ray_cast:
         SEC                     ; Calculate angle offsets
         LDA $21
         SBC #$0E
@@ -564,6 +567,7 @@ calc_angle2:
         STA $2C
 
         LDX #$00                ; Load sine/cosine tables
+jump47B:
         LDA $D3CD,X
         STA $38
         LDA $D3E9,X
@@ -724,7 +728,8 @@ ray_loop:
         ADC $3D
         STA $4E
         JMP ray_loop
-
+hit_wall_y_short:
+        JMP hit_wall_y
 step_y:
         LDA $56                 ; Step Y direction
         ADC $45
@@ -736,7 +741,7 @@ step_y:
         STA $58
         LDY $55
         LDA ($57),Y
-        BMI hit_wall_y
+        BMI hit_wall_y_short
         INC $4A
         CLC
         LDA $4F
@@ -885,15 +890,15 @@ apply_direction_y:
         STA $53
         LDA $1E
         ADC $54
-        JMP finish_calc_y
+        JMP calculate_sprite_data
 sub_direction_y:
 
 continue_function:
         ; Function continues beyond provided code...
 
-.endproc
 
-.proc calculate_sprite_data
+
+calculate_sprite_data:
     LSR A
     ROR $53
     CMP $55
@@ -934,7 +939,7 @@ update_y1:
     LDY #$00
 update_y2:
     STY $2A
-    JMP $C47B
+    JMP jump47B
 
 process_complete:
     SEC
@@ -954,7 +959,7 @@ jump6DA:
     TYA
     BEQ skip_lookup1
 call_lookup1:
-    JSR $CDBE
+    JSR variable_compare_check
 skip_lookup1:
     ASL A
     ASL A
@@ -964,7 +969,7 @@ skip_lookup1:
     TYA
     BEQ skip_lookup2
 call_lookup2:
-    JSR $CDBE
+    JSR variable_compare_check
 skip_lookup2:
     ORA $25
     TAY
@@ -1083,7 +1088,7 @@ continue_search:
     TXA
     ADC #$08
     TAX
-    JMP $C9C8
+    JMP sprite_complete
 
 normal_render:
     STX $26
@@ -1105,23 +1110,21 @@ clamp_value:
     STA $60
     LDY $26
     LDA $0138,Y
-    BNE continue_processing
+    BNE render_sprite_column
     LDY $5E
-    BNE continue_processing
-    JMP $C963
-.endproc
+    JMP column_done
 
 ; This function performs sprite data calculation and rendering
 ; It includes binary search for lookup tables and special rendering modes
 
 ;c8ca - c96e
-.proc render_sprite_column
+render_sprite_column:
     LDA $5C
     EOR #$FF
     STA $61
     LDY $5E
     BNE column_loop
-    JMP $C963
+    JMP column_done
 
 column_loop:
     LDA $59
@@ -1218,11 +1221,10 @@ check_pixel4:
 column_done:
     LDY $26
     LDA $0138,Y
-    BNE continue_processing
+    BNE render_sprite_remainder
     LDY $60
-    BNE continue_processing
-    JMP $C9B6
-.endproc
+    JMP fill_empty_columns
+
 
 ; This function renders a column of sprite data by:
 ; 1. Processing 4 pixel pairs per column iteration
@@ -1231,7 +1233,7 @@ column_done:
 ; 4. Continuing until all columns are processed
 
 ;c983 -c9f6
-.proc render_sprite_remainder
+render_sprite_remainder:
     LDY $60
     BEQ fill_empty_columns
     DEC $5F
@@ -1286,7 +1288,7 @@ sprite_complete:
     TXA
     LSR A
     BCC check_next_bit
-    JMP $C704a ----------------------------------------------------------------------------------------------------------------------------
+    JMP setup_rotation
 
 check_next_bit:
     LSR A
@@ -1300,14 +1302,14 @@ store_result:
     STA $0030,Y
     INC $2E
     CPX #$1C
-    BEQ process_complete
+    BEQ process_completed
 
     LDA $2B
     AND #$7F
     STA $2B
     JMP jump6B2
 
-process_complete:
+process_completed:
     JSR counter_update
     DEC $2D
     JMP jumpC2CE
@@ -1648,18 +1650,18 @@ skip_var23_exit:
 
 store_value:
     JMP jumpDE3           ; Jump to external routine
-.endproc
+
 
 ;cddc- cde0
-.proc store_and_return_one
+store_and_return_one:
     STA $23             ; Store A in variable $23
 jumpDDE:
     LDA #$01            ; Load 1
     RTS                 ; Return
-.endproc
+
 
 ;cde1 - cde5
-.proc store_and_return_two
+store_and_return_two:
     STA $24             ; Store A in variable $24
 jumpDE3:
     LDA #$02            ; Load 2
